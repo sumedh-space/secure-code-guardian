@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Secure Code Guardian - Dashboard</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0f172a; color: #e2e8f0; min-height: 100vh; }
+        .header { background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); padding: 20px 30px; border-bottom: 1px solid #334155; display: flex; justify-content: space-between; align-items: center; }
+        .header h1 { font-size: 22px; color: #38bdf8; }
+        .header .status { color: #4ade80; font-size: 14px; }
+        .container { max-width: 1200px; margin: 0 auto; padding: 30px; }
+        .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 20px; margin-bottom: 30px; }
+        .stat-card { background: #1e293b; border-radius: 12px; padding: 24px; border: 1px solid #334155; }
+        .stat-card .label { font-size: 13px; color: #94a3b8; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 1px; }
+        .stat-card .value { font-size: 36px; font-weight: 700; }
+        .stat-card .value.green { color: #4ade80; }
+        .stat-card .value.red { color: #f87171; }
+        .stat-card .value.yellow { color: #fbbf24; }
+        .stat-card .value.blue { color: #38bdf8; }
+        .section { background: #1e293b; border-radius: 12px; padding: 24px; border: 1px solid #334155; margin-bottom: 24px; }
+        .section h2 { font-size: 18px; color: #f1f5f9; margin-bottom: 16px; }
+        .scan-form { display: flex; flex-direction: column; gap: 12px; }
+        .scan-form textarea { background: #0f172a; border: 1px solid #334155; color: #e2e8f0; padding: 12px; border-radius: 8px; font-family: 'Consolas', monospace; font-size: 14px; min-height: 150px; resize: vertical; }
+        .scan-form select, .scan-form input { background: #0f172a; border: 1px solid #334155; color: #e2e8f0; padding: 10px 12px; border-radius: 8px; font-size: 14px; }
+        .btn { background: linear-gradient(135deg, #3b82f6, #2563eb); color: white; border: none; padding: 12px 24px; border-radius: 8px; font-size: 15px; cursor: pointer; font-weight: 600; }
+        .btn:hover { background: linear-gradient(135deg, #2563eb, #1d4ed8); }
+        .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        .results { margin-top: 20px; }
+        .threat { background: #0f172a; border-radius: 8px; padding: 16px; margin-bottom: 10px; border-left: 4px solid; }
+        .threat.critical { border-color: #ef4444; }
+        .threat.high { border-color: #f97316; }
+        .threat.medium { border-color: #eab308; }
+        .threat .threat-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+        .threat .threat-name { font-weight: 600; font-size: 15px; }
+        .badge { padding: 3px 10px; border-radius: 20px; font-size: 11px; font-weight: 700; text-transform: uppercase; }
+        .badge.critical { background: #dc26261a; color: #ef4444; }
+        .badge.high { background: #ea580c1a; color: #f97316; }
+        .badge.medium { background: #ca8a041a; color: #eab308; }
+        .threat .fix { color: #94a3b8; font-size: 13px; margin-top: 6px; }
+        .threat .meta { color: #64748b; font-size: 12px; margin-top: 4px; }
+        .score-display { text-align: center; padding: 20px; }
+        .score-display .score-num { font-size: 64px; font-weight: 800; }
+        .score-display .score-label { font-size: 14px; color: #94a3b8; }
+        .log-entry { padding: 10px 0; border-bottom: 1px solid #334155; font-size: 13px; display: flex; justify-content: space-between; }
+        .log-entry .action { color: #38bdf8; }
+        .log-entry .time { color: #64748b; }
+        .tabs { display: flex; gap: 8px; margin-bottom: 24px; }
+        .tab { padding: 8px 20px; border-radius: 8px; cursor: pointer; font-size: 14px; background: #1e293b; border: 1px solid #334155; color: #94a3b8; }
+        .tab.active { background: #3b82f6; color: white; border-color: #3b82f6; }
+        .empty-state { text-align: center; padding: 40px; color: #64748b; }
+        .blocked-banner { background: #dc26261a; border: 1px solid #ef4444; border-radius: 8px; padding: 16px; text-align: center; color: #ef4444; font-weight: 600; margin-bottom: 16px; }
+        .passed-banner { background: #16a34a1a; border: 1px solid #4ade80; border-radius: 8px; padding: 16px; text-align: center; color: #4ade80; font-weight: 600; margin-bottom: 16px; }
+        .row { display: flex; gap: 12px; }
+        .row > * { flex: 1; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>🛡️ Secure Code Guardian</h1>
+        <div class="status" id="apiStatus">Connecting...</div>
+    </div>
+    <div class="container">
+        <div class="stats-grid" id="statsGrid">
+            <div class="stat-card"><div class="label">Security Score</div><div class="value green" id="statScore">--</div></div>
+            <div class="stat-card"><div class="label">Total Scans</div><div class="value blue" id="statScans">--</div></div>
+            <div class="stat-card"><div class="label">Threats Found</div><div class="value yellow" id="statThreats">--</div></div>
+            <div class="stat-card"><div class="label">PRs Blocked</div><div class="value red" id="statBlocked">--</div></div>
+        </div>
+
+        <div class="tabs">
+            <div class="tab active" onclick="switchTab('scan')">Scan Code</div>
+            <div class="tab" onclick="switchTab('logs')">Audit Logs</div>
+            <div class="tab" onclick="switchTab('rules')">Custom Rules</div>
+        </div>
+
+        <div id="tab-scan">
+            <div class="section">
+                <h2>Scan Code for Vulnerabilities</h2>
+                <div class="scan-form">
+                    <div class="row">
+                        <select id="language">
+                            <option value="javascript">JavaScript</option>
+                            <option value="python">Python</option>
+                            <option value="java">Java</option>
+                            <option value="sql">SQL</option>
+                        </select>
+                        <input type="text" id="repoName" placeholder="Repository name (e.g. my-app)" value="my-app">
+                    </div>
+                    <textarea id="codeInput" placeholder="Paste your code here to scan for vulnerabilities..."></textarea>
+                    <button class="btn" id="scanBtn" onclick="scanCode()">🔍 Scan Code</button>
+                </div>
+                <div class="results" id="scanResults"></div>
+            </div>
+        </div>
+
+        <div id="tab-logs" style="display:none">
+            <div class="section">
+                <h2>Audit Logs</h2>
+                <div id="auditLogs"><div class="empty-state">No audit logs yet. Run a scan first.</div></div>
+            </div>
+        </div>
+
+        <div id="tab-rules" style="display:none">
+            <div class="section">
+                <h2>Add Custom Security Rule</h2>
+                <div class="scan-form">
+                    <input type="text" id="ruleName" placeholder="Rule name (e.g. No console.log)">
+                    <input type="text" id="rulePattern" placeholder="Regex pattern (e.g. console\.log)">
+                    <div class="row">
+                        <select id="ruleRisk">
+                            <option value="critical">Critical</option>
+                            <option value="high">High</option>
+                            <option value="medium">Medium</option>
+                        </select>
+                        <select id="ruleLang">
+                            <option value="all">All Languages</option>
+                            <option value="javascript">JavaScript</option>
+                            <option value="python">Python</option>
+                            <option value="java">Java</option>
+                        </select>
+                    </div>
+                    <input type="text" id="ruleFix" placeholder="Fix suggestion">
+                    <button class="btn" onclick="addRule()">➕ Add Rule</button>
+                </div>
+                <div id="rulesList" style="margin-top:16px"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API = window.location.hostname === 'localhost'
+            ? 'http://localhost:5000'
+            : ' https://backend-kappa-three-54.vercel.app';
+        const TEAM_ID = 'team_prod_001';
+
+        async function checkHealth() {
+            try {
+                const res = await fetch(API + '/api/health');
+                const data = await res.json();
+                document.getElementById('apiStatus').textContent = '● System Online';
+                document.getElementById('apiStatus').style.color = '#4ade80';
+                loadDashboard();
+            } catch(e) {
+                document.getElementById('apiStatus').textContent = '● Connecting...';
+                document.getElementById('apiStatus').style.color = '#fbbf24';
+                setTimeout(checkHealth, 5000);
+            }
+        }
+
+        async function loadDashboard() {
+            try {
+                const res = await fetch(API + '/api/teams/' + TEAM_ID + '/dashboard');
+                const data = await res.json();
+                document.getElementById('statScore').textContent = data.averageScore || 100;
+                document.getElementById('statScans').textContent = data.totalScans || 0;
+                document.getElementById('statThreats').textContent = data.totalThreats || 0;
+                document.getElementById('statBlocked').textContent = data.blockedPRs || 0;
+            } catch(e) {
+                console.log('Dashboard data not available yet');
+            }
+        }
+
+        async function scanCode() {
+            const btn = document.getElementById('scanBtn');
+            btn.disabled = true;
+            btn.textContent = '⏳ Scanning...';
+
+            const code = document.getElementById('codeInput').value;
+            const language = document.getElementById('language').value;
+            const repoName = document.getElementById('repoName').value;
+
+            if (!code.trim()) {
+                btn.disabled = false;
+                btn.textContent = '🔍 Scan Code';
+                alert('Please paste some code to scan');
+                return;
+            }
+
+            try {
+                const res = await fetch(API + '/api/scan', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ teamId: TEAM_ID, developerId: 'dashboard-user', code, language, repoName, branch: 'main', commitHash: 'manual-scan' })
+                });
+                const data = await res.json();
+                displayResults(data);
+                loadDashboard();
+                loadLogs();
+            } catch(e) {
+                document.getElementById('scanResults').innerHTML = '<div class="blocked-banner">Error connecting to API. Make sure backend is running.</div>';
+            }
+
+            btn.disabled = false;
+            btn.textContent = '🔍 Scan Code';
+        }
+
+        function displayResults(data) {
+            let html = '';
+            if (data.blocked) {
+                html += '<div class="blocked-banner">🚫 BLOCKED — ' + data.criticalCount + ' critical vulnerabilities found</div>';
+            } else {
+                html += '<div class="passed-banner">✅ PASSED — Security Score: ' + data.score + '/100</div>';
+            }
+
+            html += '<div class="score-display"><div class="score-num" style="color:' + (data.score >= 70 ? '#4ade80' : data.score >= 40 ? '#fbbf24' : '#ef4444') + '">' + data.score + '</div><div class="score-label">Security Score</div></div>';
+
+            if (data.threats && data.threats.length > 0) {
+                data.threats.sort((a,b) => { const order = {critical:0,high:1,medium:2}; return (order[a.risk]||3) - (order[b.risk]||3); });
+                data.threats.forEach(t => {
+                    html += '<div class="threat ' + t.risk + '"><div class="threat-header"><span class="threat-name">' + t.name + '</span><span class="badge ' + t.risk + '">' + t.risk + '</span></div><div class="fix">💡 Fix: ' + t.fix + '</div><div class="meta">' + t.cwe + ' | Line ~' + t.line + ' | ' + t.match + '</div></div>';
+                });
+            } else {
+                html += '<div class="empty-state">✅ No vulnerabilities detected. Code looks clean!</div>';
+            }
+
+            document.getElementById('scanResults').innerHTML = html;
+        }
+
+        async function loadLogs() {
+            try {
+                const res = await fetch(API + '/api/audit-logs/' + TEAM_ID);
+                const logs = await res.json();
+                if (logs.length === 0) {
+                    document.getElementById('auditLogs').innerHTML = '<div class="empty-state">No audit logs yet.</div>';
+                    return;
+                }
+                let html = '';
+                logs.forEach(l => {
+                    html += '<div class="log-entry"><span class="action">' + l.action + '</span><span>' + l.details + '</span><span class="time">' + new Date(l.timestamp).toLocaleString() + '</span></div>';
+                });
+                document.getElementById('auditLogs').innerHTML = html;
+            } catch(e) {}
+        }
+
+        async function addRule() {
+            const name = document.getElementById('ruleName').value;
+            const pattern = document.getElementById('rulePattern').value;
+            const riskLevel = document.getElementById('ruleRisk').value;
+            const language = document.getElementById('ruleLang').value;
+            const fixSuggestion = document.getElementById('ruleFix').value;
+
+            if (!name || !pattern) { alert('Name and pattern are required'); return; }
+
+            try {
+                await fetch(API + '/api/custom-rules', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ teamId: TEAM_ID, name, pattern, riskLevel, language, fixSuggestion })
+                });
+                document.getElementById('ruleName').value = '';
+                document.getElementById('rulePattern').value = '';
+                document.getElementById('ruleFix').value = '';
+                loadRules();
+            } catch(e) { alert('Failed to add rule'); }
+        }
+
+        async function loadRules() {
+            try {
+                const res = await fetch(API + '/api/custom-rules/' + TEAM_ID);
+                const rules = await res.json();
+                if (rules.length === 0) {
+                    document.getElementById('rulesList').innerHTML = '<div class="empty-state">No custom rules yet.</div>';
+                    return;
+                }
+                let html = '';
+                rules.forEach(r => {
+                    html += '<div class="threat ' + r.riskLevel + '"><div class="threat-header"><span class="threat-name">' + r.name + '</span><span class="badge ' + r.riskLevel + '">' + r.riskLevel + '</span></div><div class="fix">Pattern: ' + r.pattern + '</div><div class="meta">Language: ' + r.language + ' | Fix: ' + (r.fixSuggestion || 'N/A') + '</div></div>';
+                });
+                document.getElementById('rulesList').innerHTML = html;
+            } catch(e) {}
+        }
+
+        function switchTab(tab) {
+            document.querySelectorAll('.tabs .tab').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('[id^="tab-"]').forEach(t => t.style.display = 'none');
+            document.getElementById('tab-' + tab).style.display = 'block';
+            event.target.classList.add('active');
+            if (tab === 'logs') loadLogs();
+            if (tab === 'rules') loadRules();
+        }
+
+        checkHealth();
+        setInterval(loadDashboard, 30000);
+    </script>
+</body>
+</html>
