@@ -1,0 +1,50 @@
+name: Secure Code Guardian Scan
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    paths:
+      - '**.js'
+      - '**.ts'
+      - '**.py'
+      - '**.java'
+      - '**.sql'
+
+jobs:
+  security-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 2
+
+      - name: Get changed files
+        id: files
+        run: |
+          FILES=$(git diff --name-only HEAD~1 -- '*.js' '*.ts' '*.py' '*.java' '*.sql' 2>/dev/null || echo "")
+          echo "changed=$FILES" >> $GITHUB_OUTPUT
+
+      - name: Scan each file
+        if: steps.files.outputs.changed != ''
+        run: |
+          CRITICAL=0
+          for file in ${{ steps.files.outputs.changed }}; do
+            if [ -f "$file" ]; then
+              CODE=$(cat "$file" | jq -Rs .)
+              LANG="javascript"
+              case "$file" in *.py) LANG="python";; *.java) LANG="java";; *.sql) LANG="sql";; esac
+
+              RESULT=$(curl -s -X POST "${{ secrets.GUARDIAN_API_URL }}/api/scan" \
+                -H "Content-Type: application/json" \
+                -d "{\"teamId\":\"${{ secrets.TEAM_ID }}\",\"developerId\":\"${{ github.actor }}\",\"code\":$CODE,\"language\":\"$LANG\",\"repoName\":\"${{ github.repository }}\",\"branch\":\"${{ github.head_ref }}\",\"commitHash\":\"${{ github.sha }}\"}")
+
+              FILE_CRITICAL=$(echo "$RESULT" | jq -r '.criticalCount // 0')
+              CRITICAL=$((CRITICAL + FILE_CRITICAL))
+              echo "Scanned $file: Critical=$FILE_CRITICAL"
+            fi
+          done
+
+          if [ "$CRITICAL" -gt 0 ]; then
+            echo "BLOCKED: $CRITICAL critical vulnerabilities found"
+            exit 1
+          fi
+          echo "PASSED: No critical issues"
