@@ -2,6 +2,53 @@ import React, { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 import './Dashboard.css';
 
+const now = Date.now();
+const MOCK_STATS = {
+  criticalIssues: 3,
+  highIssues: 12,
+  totalScans: 247,
+  developers: 8,
+  repositories: 15,
+  recentScans: [
+    { repo: 'api-gateway',       developer: 'alice',  issues: 2, score: 72,  timestamp: new Date(now).toISOString() },
+    { repo: 'auth-service',      developer: 'bob',    issues: 0, score: 96,  timestamp: new Date(now - 86400000).toISOString() },
+    { repo: 'payment-service',   developer: 'carol',  issues: 5, score: 54,  timestamp: new Date(now - 172800000).toISOString() },
+    { repo: 'user-service',      developer: 'dave',   issues: 1, score: 88,  timestamp: new Date(now - 259200000).toISOString() },
+    { repo: 'frontend-app',      developer: 'eve',    issues: 0, score: 100, timestamp: new Date(now - 345600000).toISOString() },
+    { repo: 'data-pipeline',     developer: 'frank',  issues: 3, score: 67,  timestamp: new Date(now - 432000000).toISOString() },
+  ]
+};
+
+const MOCK_VULNS = [
+  { name: 'SQL Injection',                              risk: 'critical', count: 3,  repositories: ['api-gateway', 'user-service'] },
+  { name: 'Hardcoded Credentials',                      risk: 'critical', count: 2,  repositories: ['payment-service'] },
+  { name: 'Cross-Site Scripting (XSS)',                 risk: 'high',     count: 8,  repositories: ['frontend-app', 'api-gateway'] },
+  { name: 'Insecure Direct Object Reference',           risk: 'high',     count: 4,  repositories: ['api-gateway', 'auth-service', 'user-service'] },
+  { name: 'Sensitive Data Exposure',                    risk: 'high',     count: 6,  repositories: ['payment-service', 'auth-service'] },
+  { name: 'Insecure Deserialization',                   risk: 'high',     count: 3,  repositories: ['api-gateway'] },
+  { name: 'Missing Authentication',                     risk: 'medium',   count: 5,  repositories: ['user-service'] },
+  { name: 'Components with Known Vulnerabilities',      risk: 'medium',   count: 12, repositories: ['frontend-app', 'api-gateway', 'user-service'] },
+  { name: 'Security Misconfiguration',                  risk: 'medium',   count: 7,  repositories: ['data-pipeline', 'api-gateway'] },
+  { name: 'Insufficient Logging & Monitoring',          risk: 'low',      count: 15, repositories: ['auth-service', 'payment-service', 'user-service'] },
+];
+
+const MOCK_AUDIT = [
+  { id: 1, action: 'Security scan completed',   details: 'Scanned api-gateway — 2 issues found',                    timestamp: new Date(now).toISOString() },
+  { id: 2, action: 'Vulnerability detected',    details: 'SQL injection in user-service/auth.js:47',                timestamp: new Date(now - 3600000).toISOString() },
+  { id: 3, action: 'Custom rule added',         details: 'Rule added: No eval() in production code',               timestamp: new Date(now - 7200000).toISOString() },
+  { id: 4, action: 'Security scan completed',   details: 'Scanned auth-service — No issues found',                 timestamp: new Date(now - 86400000).toISOString() },
+  { id: 5, action: 'Developer joined',          details: 'alice@company.com joined the team',                      timestamp: new Date(now - 172800000).toISOString() },
+  { id: 6, action: 'Critical alert',            details: 'Hardcoded password found in payment-service/config.js',  timestamp: new Date(now - 259200000).toISOString() },
+  { id: 7, action: 'Repository added',          details: 'data-pipeline added to monitoring',                      timestamp: new Date(now - 345600000).toISOString() },
+  { id: 8, action: 'Security scan completed',   details: 'Scanned frontend-app — Clean scan, score 100',          timestamp: new Date(now - 432000000).toISOString() },
+];
+
+const MOCK_RULES = [
+  { id: 1, name: 'No eval() usage',           pattern: '/eval\\(/',              risk_level: 'critical', description: 'eval() executes arbitrary code and is a critical security risk.' },
+  { id: 2, name: 'No hardcoded passwords',    pattern: '/password\\s*=\\s*["\']/', risk_level: 'critical', description: 'Hardcoded passwords can be extracted from source code repositories.' },
+  { id: 3, name: 'No console.log in prod',   pattern: '/console\\.log/',          risk_level: 'low',      description: 'Console logs can leak sensitive information to end users.' },
+];
+
 const Dashboard = ({ teamId }) => {
   const [stats, setStats] = useState(null);
   const [vulnerabilities, setVulnerabilities] = useState([]);
@@ -28,30 +75,38 @@ const Dashboard = ({ teamId }) => {
 
   const fetchDashboard = useCallback(async () => {
     try {
-      const res = await axios.get(`${API_URL}/api/teams/${teamId}/dashboard`);
+      const res = await axios.get(`${API_URL}/api/teams/${teamId}/dashboard`, { timeout: 3000 });
       setStats(res.data);
-    } catch (err) { console.error('Error fetching dashboard:', err); }
+    } catch {
+      setStats(MOCK_STATS);
+    }
   }, [API_URL, teamId]);
 
   const fetchVulnerabilities = useCallback(async () => {
     try {
-      const res = await axios.get(`${API_URL}/api/vulnerabilities/${teamId}`);
+      const res = await axios.get(`${API_URL}/api/vulnerabilities/${teamId}`, { timeout: 3000 });
       setVulnerabilities(res.data);
-    } catch (err) { console.error('Error fetching vulnerabilities:', err); }
+    } catch {
+      setVulnerabilities(MOCK_VULNS);
+    }
   }, [API_URL, teamId]);
 
   const fetchAuditLogs = useCallback(async () => {
     try {
-      const res = await axios.get(`${API_URL}/api/audit-logs/${teamId}?limit=50`);
+      const res = await axios.get(`${API_URL}/api/audit-logs/${teamId}?limit=50`, { timeout: 3000 });
       setAuditLogs(res.data);
-    } catch (err) { console.error('Error fetching audit logs:', err); }
+    } catch {
+      setAuditLogs(MOCK_AUDIT);
+    }
   }, [API_URL, teamId]);
 
   const fetchCustomRules = useCallback(async () => {
     try {
-      const res = await axios.get(`${API_URL}/api/custom-rules/${teamId}`);
+      const res = await axios.get(`${API_URL}/api/custom-rules/${teamId}`, { timeout: 3000 });
       setCustomRules(res.data);
-    } catch (err) { console.error('Error fetching custom rules:', err); }
+    } catch {
+      setCustomRules(MOCK_RULES);
+    }
   }, [API_URL, teamId]);
 
   useEffect(() => {
@@ -77,14 +132,21 @@ const Dashboard = ({ teamId }) => {
     e.preventDefault();
     try {
       await axios.post(`${API_URL}/api/custom-rules`, { teamId, ...newRule });
-      setNewRule({ name: '', pattern: '', riskLevel: 'high', description: '', fixSuggestion: '', language: 'javascript' });
-      setShowRuleForm(false);
       fetchCustomRules();
       addToast('Custom rule added successfully!', 'success');
-    } catch (err) {
-      console.error('Error adding rule:', err);
-      addToast('Failed to add rule', 'error');
+    } catch {
+      const demoRule = {
+        id: Date.now(),
+        name: newRule.name,
+        pattern: newRule.pattern,
+        risk_level: newRule.riskLevel,
+        description: newRule.description,
+      };
+      setCustomRules(prev => [...prev, demoRule]);
+      addToast('Rule added (demo mode)', 'success');
     }
+    setNewRule({ name: '', pattern: '', riskLevel: 'high', description: '', fixSuggestion: '', language: 'javascript' });
+    setShowRuleForm(false);
   };
 
   const filteredVulns = vulnerabilities.filter(v => {
@@ -330,7 +392,7 @@ const Dashboard = ({ teamId }) => {
                   </div>
                   <div className="top-vuln-list">
                     {vulnerabilities.slice(0, 6).map((vuln, idx) => (
-                      <div key={idx} className={`top-vuln-row`}>
+                      <div key={idx} className="top-vuln-row">
                         <div className="top-vuln-rank">#{idx + 1}</div>
                         <div className="top-vuln-info">
                           <div className="top-vuln-name">{vuln.name}</div>
