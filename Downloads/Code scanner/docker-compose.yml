@@ -1,0 +1,61 @@
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    container_name: guardian-backend
+    ports:
+      - "5000:5000"
+    environment:
+      NODE_ENV: production
+      PORT: 5000
+      TEAM_ID: ${TEAM_ID}
+      DATABASE_URL: ${DATABASE_URL}
+      CORS_ORIGIN: ${CORS_ORIGIN}
+    volumes:
+      - ./backend:/app
+      - guardian_data:/app/data
+    restart: unless-stopped
+    networks:
+      - guardian-network
+
+  frontend:
+    build:
+      context: frontend
+      dockerfile: Dockerfile
+    container_name: guardian-frontend
+    ports:
+      - "3000:3000"
+    environment:
+      REACT_APP_API_URL: ${API_URL:-http://localhost:5000}
+      REACT_APP_ENV: production
+    depends_on:
+      - backend
+    restart: unless-stopped
+    networks:
+      - guardian-network
+
+  nginx:
+    image: nginx:alpine
+    container_name: guardian-nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./docker/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./docker/ssl:/etc/nginx/ssl:ro
+    depends_on:
+      - backend
+      - frontend
+    restart: unless-stopped
+    networks:
+      - guardian-network
+
+volumes:
+  guardian_data:
+
+networks:
+  guardian-network:
+    driver: bridge

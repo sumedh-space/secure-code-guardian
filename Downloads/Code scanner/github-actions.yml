@@ -1,0 +1,123 @@
+name: Secure Code Guardian Scan
+
+on:
+  pull_request:
+    branches: [ main, develop ]
+  push:
+    branches: [ main, develop ]
+
+jobs:
+  security-scan:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Get code changes
+      id: changed-files
+      uses: tj-actions/changed-files@v35
+      with:
+        files: |
+          *.js
+          *.ts
+          *.jsx
+          *.tsx
+          *.py
+          *.java
+          *.sql
+    
+    - name: Run Secure Code Guardian
+      env:
+        GUARDIAN_API_URL: ${{ secrets.GUARDIAN_API_URL }}
+        TEAM_ID: ${{ secrets.TEAM_ID }}
+        DEVELOPER_NAME: ${{ github.actor }}
+      run: |
+        # Install dependencies
+        npm install -g axios dotenv
+        
+        # Run the scan
+        node - << 'EOF'
+        const axios = require('axios');
+        const fs = require('fs');
+        const path = require('path');
+        
+        const guardianUrl = process.env.GUARDIAN_API_URL;
+        const teamId = process.env.TEAM_ID;
+        const developerId = process.env.DEVELOPER_NAME;
+        const repoName = process.env.GITHUB_REPOSITORY;
+        const branch = process.env.GITHUB_REF_NAME;
+        const commit = process.env.GITHUB_SHA;
+        
+        const changedFiles = process.env.CHANGED_FILES ? process.env.CHANGED_FILES.split('\n') : [];
+        
+        async function scanCode() {
+          try {
+            let allThreats = [];
+            
+            for (const file of changedFiles) {
+              if (!fs.existsSync(file)) continue;
+              
+              const code = fs.readFileSync(file, 'utf-8');
+              const ext = path.extname(file).toLowerCase();
+              
+              let language = 'javascript';
+              if (ext === '.py') language = 'python';
+              else if (ext === '.java') language = 'java';
+              else if (ext === '.sql') language = 'sql';
+              else if (['.ts', '.tsx'].includes(ext)) language = 'javascript';
+              
+              const response = await axios.post(`${guardianUrl}/api/scan`, {
+                teamId,
+                developerId,
+                code,
+                language,
+                repoName,
+                branch,
+                commitHash: commit
+              });
+              
+              allThreats = allThreats.concat(response.data.threats || []);
+            }
+            
+            const criticalCount = allThreats.filter(t => t.risk === 'critical').length;
+            
+            console.log('\n=== SECURE CODE GUARDIAN SCAN RESULTS ===');
+            console.log(`Total Issues Found: ${allThreats.length}`);
+            console.log(`Critical Issues: ${criticalCount}`);
+            
+            if (criticalCount > 0) {
+              console.log('\n❌ PR BLOCKED: Critical security vulnerabilities detected');
+              allThreats.filter(t => t.risk === 'critical').forEach(t => {
+                console.log(`  - ${t.name}: ${t.fix}`);
+              });
+              process.exit(1);
+            } else {
+              console.log('\n✓ Security check passed');
+              process.exit(0);
+            }
+          } catch (error) {
+            console.error('Scan failed:', error.message);
+            process.exit(1);
+          }
+        }
+        
+        scanCode();
+        EOF
+    
+    - name: Comment on PR
+      if: always()
+      uses: actions/github-script@v6
+      with:
+        github-token: ${{ secrets.GITHUB_TOKEN }}
+        script: |
+          const fs = require('fs');
+          const scanResult = process.env.SCAN_RESULT;
+          
+          if (context.payload.pull_request) {
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: `🔒 **Security Guardian Report**\n\nCode has been scanned by Secure Code Guardian. Check the scan results above.`
+            });
+          }
